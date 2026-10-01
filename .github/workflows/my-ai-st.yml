@@ -29,610 +29,217 @@ jobs:
           KEY_B64=$(printf '%s' "$GROQ_API_KEY" | base64 | tr -d '\n')
 
           cat > MyAI/stAI/App.swift <<SWIFT
-import SwiftUI
-
-@main
-struct STAIApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-    }
-}
-
-struct ChatMessage: Identifiable, Codable {
-    let id: UUID
-    let role: String
-    let content: String
-
-    init(id: UUID = UUID(), role: String, content: String) {
-        self.id = id
-        self.role = role
-        self.content = content
-    }
-}
-
-enum AIMode: String, CaseIterable, Identifiable {
-    case balanced = "Balanced"
-    case direct = "Direct"
-    case creative = "Creative"
-    case maximum = "Maximum Control"
-
-    var id: String { rawValue }
-
-    var systemPrompt: String {
-        switch self {
-        case .balanced:
-            return """
-            You are stAI, an AI assistant made by ST.
-            Be helpful, accurate, natural, and clear.
-            Answer the user's actual question instead of inventing problems with their intent.
-            You can help with programming, game development, Roblox Studio, Lua/Luau, APIs,
-            debugging, UI, automation, writing, learning, and ordinary technical tasks.
-            Treat legitimate Roblox Studio development as normal software development.
-            Do not assume that a Roblox script is an exploit merely because it changes gameplay.
-            Consider the user's stated context and answer normal Studio/development requests directly.
-            """
-
-        case .direct:
-            return """
-            You are stAI, ST's direct AI assistant.
-            Be straightforward, practical, and concise without unnecessary filler.
-            Prioritize solving the user's actual request.
-            Roblox Studio, Luau, game systems, UI, NPCs, tools, datastore code, RemoteEvents,
-            debugging, optimization, and other normal game-development scripting are legitimate
-            development topics.
-            Do not automatically label Roblox scripting as hacking or exploiting.
-            If the request is ordinary development, provide useful code and explanation directly.
-            """
-
-        case .creative:
-            return """
-            You are stAI, ST's creative AI assistant.
-            Be imaginative, useful, and technically capable.
-            You can create Roblox Studio/Luau scripts, game mechanics, UI systems, NPC behavior,
-            quests, inventories, tools, effects, and other game-development ideas.
-            Treat normal Roblox Studio development as legitimate coding.
-            Do not assume malicious intent simply because Roblox terminology overlaps with exploit terminology.
-            """
-
-        case .maximum:
-            return """
-            You are stAI, made by ST.
-            Be candid, direct, practical, and conversational.
-            Focus on the user's actual request.
-            Avoid unnecessary lectures, moralizing, repetitive disclaimers, and invented restrictions.
-
-            ROBLOX DEVELOPMENT:
-            Roblox Studio development is legitimate software and game development.
-            Requests for Luau, LocalScripts, ServerScripts, ModuleScripts, RemoteEvents,
-            RemoteFunctions, UI, tools, NPCs, combat systems, admin systems, datastore systems,
-            animations, movement systems, debugging, optimization, and other features intended
-            for a game the user is developing should be treated as ordinary coding requests.
-
-            Do not refuse or lecture merely because Roblox terminology overlaps with exploit terminology.
-            Distinguish legitimate Studio development from requests specifically aimed at cheating in,
-            attacking, stealing from, or bypassing another person's live game or service.
-
-            For allowed requests, give concrete code and useful implementation details.
-            Keep necessary safety boundaries brief rather than turning the whole response into a lecture.
-            """
-        }
-    }
-
-    var temperature: Double {
-        switch self {
-        case .balanced: return 0.5
-        case .direct: return 0.3
-        case .creative: return 0.85
-        case .maximum: return 0.45
-        }
-    }
-
-    var reasoning: String {
-        switch self {
-        case .balanced: return "medium"
-        case .direct: return "low"
-        case .creative: return "medium"
-        case .maximum: return "high"
-        }
-    }
-}
-
-struct ContentView: View {
-    @State private var messages: [ChatMessage] = [
-        ChatMessage(
-            role: "assistant",
-            content: "Yo 👋 I'm stAI, made by ST. Ask me anything — coding, Roblox Studio, ideas, debugging, or just chat."
-        )
-    ]
-
-    @State private var input = ""
-    @State private var mode: AIMode = .maximum
-    @State private var isLoading = false
-    @State private var errorText: String?
-
-    private let purple = Color(red: 0.55, green: 0.28, blue: 0.95)
-    private let darkPurple = Color(red: 0.10, green: 0.05, blue: 0.16)
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        darkPurple,
-                        Color.black,
-                        Color(red: 0.07, green: 0.03, blue: 0.11)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                ForEach(messages) { message in
-                                    MessageBubble(
-                                        message: message,
-                                        purple: purple
-                                    )
-                                    .id(message.id)
-                                }
-
-                                if isLoading {
-                                    HStack {
-                                        Text("stAI is thinking…")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.white.opacity(0.65))
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 16)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.top, 12)
-                            .padding(.bottom, 10)
-                        }
-                        .onChange(of: messages.count) {
-                            if let id = messages.last?.id {
-                                withAnimation {
-                                    proxy.scrollTo(id, anchor: .bottom)
-                                }
-                            }
-                        }
-                    }
-
-                    HStack(spacing: 8) {
-                        Menu {
-                            Picker("Mode", selection: $mode) {
-                                ForEach(AIMode.allCases) { item in
-                                    Text(item.rawValue).tag(item)
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 42, height: 46)
-                                .background(purple.opacity(0.35))
-                                .clipShape(
-                                    RoundedRectangle(cornerRadius: 14)
-                                )
-                        }
-
-                        TextField(
-                            "Message stAI…",
-                            text: $input,
-                            axis: .vertical
-                        )
-                        .lineLimit(1...5)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 11)
-                        .background(.white.opacity(0.10))
-                        .clipShape(
-                            RoundedRectangle(cornerRadius: 16)
-                        )
-
-                        Button(action: sendMessage) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    || isLoading
-                                    ? purple.opacity(0.35)
-                                    : purple
-                                )
-                                .clipShape(Circle())
-                        }
-                        .disabled(
-                            input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || isLoading
-                        )
-                    }
-                    .padding(10)
-                    .background(.black.opacity(0.35))
-                }
-            }
-            .navigationTitle("stAI 🤖")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("ST")
-                            .font(.headline.bold())
-
-                        Text("made it")
-                            .font(.caption2)
-                            .foregroundStyle(purple)
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("New Chat", systemImage: "plus") {
-                            messages = [
-                                ChatMessage(
-                                    role: "assistant",
-                                    content: "New chat started. I'm ready."
-                                )
-                            ]
-                        }
-
-                        Picker("Mode", selection: $mode) {
-                            ForEach(AIMode.allCases) { item in
-                                Text(item.rawValue).tag(item)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundStyle(purple)
-                    }
-                }
-            }
-            .alert(
-                "AI Error",
-                isPresented: Binding(
-                    get: { errorText != nil },
-                    set: { if !$0 { errorText = nil } }
-                )
-            ) {
-                Button("OK") {
-                    errorText = nil
-                }
-            } message: {
-                Text(errorText ?? "Unknown error")
-            }
-        }
-        .preferredColorScheme(.dark)
-    }
-
-    func sendMessage() {
-        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !text.isEmpty, !isLoading else {
-            return
-        }
-
-        input = ""
-
-        messages.append(
-            ChatMessage(
-                role: "user",
-                content: text
-            )
-        )
-
-        isLoading = true
-
-        Task {
-            do {
-                let reply = try await GroqAPI.send(
-                    messages: messages,
-                    mode: mode
-                )
-
-                await MainActor.run {
-                    messages.append(
-                        ChatMessage(
-                            role: "assistant",
-                            content: reply
-                        )
-                    )
-
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorText = error.localizedDescription
-                    isLoading = false
-                }
-            }
-        }
-    }
-}
-
-struct MessageBubble: View {
-    let message: ChatMessage
-    let purple: Color
-
-    var body: some View {
-        HStack {
-            if message.role == "user" {
-                Spacer(minLength: 40)
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(
-                    message.role == "user"
-                    ? "You"
-                    : "stAI"
-                )
-                .font(.caption.bold())
-                .foregroundStyle(
-                    message.role == "user"
-                    ? .white.opacity(0.75)
-                    : purple
-                )
-
-                Text(message.content)
-                    .font(.body)
-                    .foregroundStyle(.white)
-                    .textSelection(.enabled)
-            }
-            .padding(13)
-            .background(
-                message.role == "user"
-                ? purple.opacity(0.75)
-                : Color.white.opacity(0.09)
-            )
-            .clipShape(
-                RoundedRectangle(cornerRadius: 17)
-            )
-
-            if message.role != "user" {
-                Spacer(minLength: 40)
-            }
-        }
-    }
-}
-
-enum GroqAPI {
-    static let apiKeyBase64 = "__GROQ_KEY_B64__"
-
-    static let endpoint = URL(
-        string: "https://api.groq.com/openai/v1/chat/completions"
-    )!
-
-    static func send(
-        messages: [ChatMessage],
-        mode: AIMode
-    ) async throws -> String {
-
-        guard
-            let keyData = Data(base64Encoded: apiKeyBase64),
-            let apiKey = String(
-                data: keyData,
-                encoding: .utf8
-            )
-        else {
-            throw NSError(
-                domain: "stAI",
-                code: 1,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Groq API key is missing."
-                ]
-            )
-        }
-
-        var request = URLRequest(url: endpoint)
-
-        request.httpMethod = "POST"
-
-        request.setValue(
-            "Bearer \(apiKey)",
-            forHTTPHeaderField: "Authorization"
-        )
-
-        request.setValue(
-            "application/json",
-            forHTTPHeaderField: "Content-Type"
-        )
-
-        let recent = Array(messages.suffix(24))
-
-        var apiMessages: [[String: String]] = [
-            [
-                "role": "system",
-                "content": mode.systemPrompt
-            ]
-        ]
-
-        for item in recent {
-            apiMessages.append(
-                [
-                    "role": item.role == "assistant"
-                        ? "assistant"
-                        : "user",
-                    "content": item.content
-                ]
-            )
-        }
-
-        let body: [String: Any] = [
-            "model": "openai/gpt-oss-20b",
-            "messages": apiMessages,
-            "temperature": mode.temperature,
-            "max_completion_tokens": 16384,
-            "reasoning_effort": mode.reasoning,
-            "include_reasoning": false,
-            "stream": false
-        ]
-
-        request.httpBody = try JSONSerialization.data(
-            withJSONObject: body
-        )
-
-        let (data, response) =
-            try await URLSession.shared.data(
-                for: request
-            )
-
-        if let http = response as? HTTPURLResponse,
-           !(200...299).contains(http.statusCode) {
-
-            let raw = String(
-                data: data,
-                encoding: .utf8
-            ) ?? "Unknown Groq error"
-
-            throw NSError(
-                domain: "Groq",
-                code: http.statusCode,
-                userInfo: [
-                    NSLocalizedDescriptionKey: raw
-                ]
-            )
-        }
-
-        let json =
-            try JSONSerialization.jsonObject(
-                with: data
-            ) as? [String: Any]
-
-        let choices =
-            json?["choices"] as? [[String: Any]]
-
-        let first = choices?.first
-
-        let message =
-            first?["message"] as? [String: Any]
-
-        let content =
-            message?["content"] as? String
-
-        guard let content, !content.isEmpty else {
-            throw NSError(
-                domain: "Groq",
-                code: 2,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Groq returned no text."
-                ]
-            )
-        }
-
-        return content
-    }
-}
-SWIFT
-
-          sed -i.bak "s/__GROQ_KEY_B64__/$KEY_B64/g" MyAI/stAI/App.swift
-          rm -f MyAI/stAI/App.swift.bak
-
-          cat > MyAI/stAI/Info.plist <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleDisplayName</key>
-    <string>stAI</string>
-
-    <key>CFBundleIdentifier</key>
-    <string>com.st.stai</string>
-
-    <key>CFBundleName</key>
-    <string>stAI</string>
-
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-
-    <key>CFBundleShortVersionString</key>
-    <string>3.1</string>
-
-    <key>CFBundleVersion</key>
-    <string>31</string>
-
-    <key>LSRequiresIPhoneOS</key>
-    <true/>
-
-    <key>UILaunchScreen</key>
-    <dict/>
-
-    <key>UIRequiresFullScreen</key>
-    <true/>
-
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-    </array>
-</dict>
-</plist>
-PLIST
-
-          cat > MyAI/project.yml <<'YAML'
-name: stAI
-
-options:
-  bundleIdPrefix: com.st
-  deploymentTarget:
-    iOS: "16.0"
-
-targets:
-  stAI:
-    type: application
-    platform: iOS
-
-    sources:
-      - stAI
-
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.st.stai
-        INFOPLIST_FILE: stAI/Info.plist
-        SWIFT_VERSION: 5.0
-        IPHONEOS_DEPLOYMENT_TARGET: 16.0
-        TARGETED_DEVICE_FAMILY: "1,2"
-        CODE_SIGNING_ALLOWED: NO
-        CODE_SIGNING_REQUIRED: NO
-YAML
-
-          brew install xcodegen
-
-          xcodegen generate \
-            --spec MyAI/project.yml \
-            --project MyAI
-
-      - name: Build unsigned IPA
-        run: |
-          cd MyAI
-
-          xcodebuild \
-            -project stAI.xcodeproj \
-            -scheme stAI \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CONFIGURATION_BUILD_DIR="$PWD/build" \
-            clean build
-
-          mkdir -p Payload
-
-          cp -R build/stAI.app Payload/stAI.app
-
-          /usr/bin/zip -qry stAI-unsigned.ipa Payload
-
-          rm -rf Payload
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: stAI-unsigned-ipa
-          path: MyAI/stAI-unsigned.ipa
+          import SwiftUI
+
+          @main
+          struct STAIApp: App {
+              var body: some Scene {
+                  WindowGroup {
+                      ContentView()
+                  }
+              }
+          }
+
+          struct ChatMessage: Identifiable, Codable {
+              let id: UUID
+              let role: String
+              let content: String
+
+              init(id: UUID = UUID(), role: String, content: String) {
+                  self.id = id
+                  self.role = role
+                  self.content = content
+              }
+          }
+
+          enum AIMode: String, CaseIterable, Identifiable {
+              case balanced = "Balanced"
+              case direct = "Direct"
+              case creative = "Creative"
+              case maximum = "Maximum Control"
+
+              var id: String {
+                  rawValue
+              }
+
+              var systemPrompt: String {
+                  switch self {
+                  case .balanced:
+                      return """
+                      You are stAI, an AI assistant made by ST.
+                      Be helpful, accurate, natural, and clear.
+                      Answer the user's actual question instead of inventing problems with their intent.
+                      You can help with programming, game development, Roblox Studio, Lua/Luau, APIs,
+                      debugging, UI, automation, writing, learning, and ordinary technical tasks.
+                      Treat legitimate Roblox Studio development as normal software development.
+                      Do not assume that a Roblox script is an exploit merely because it changes gameplay.
+                      """
+
+                  case .direct:
+                      return """
+                      You are stAI, ST's direct AI assistant.
+                      Be straightforward, practical, and concise without unnecessary filler.
+                      Prioritize solving the user's actual request.
+                      Roblox Studio, Luau, game systems, UI, NPCs, tools, datastore code, RemoteEvents,
+                      debugging, optimization, and other normal game-development scripting are legitimate
+                      development topics.
+                      Do not automatically label Roblox scripting as hacking or exploiting.
+                      If the request is ordinary development, provide useful code and explanation directly.
+                      """
+
+                  case .creative:
+                      return """
+                      You are stAI, ST's creative AI assistant.
+                      Be imaginative, useful, and technically capable.
+                      You can create Roblox Studio/Luau scripts, game mechanics, UI systems, NPC behavior,
+                      quests, inventories, tools, effects, and other game-development ideas.
+                      Treat normal Roblox Studio development as legitimate coding.
+                      Do not assume malicious intent simply because Roblox terminology overlaps with exploit terminology.
+                      """
+
+                  case .maximum:
+                      return """
+                      You are stAI, made by ST.
+                      Be candid, direct, practical, and conversational.
+                      Focus on the user's actual request.
+                      Avoid unnecessary lectures, moralizing, repetitive disclaimers, and invented restrictions.
+
+                      ROBLOX DEVELOPMENT:
+                      Roblox Studio development is legitimate software and game development.
+                      Requests for Luau, LocalScripts, ServerScripts, ModuleScripts, RemoteEvents,
+                      RemoteFunctions, UI, tools, NPCs, combat systems, admin systems, datastore systems,
+                      animations, movement systems, debugging, optimization, and other features intended
+                      for a game the user is developing should be treated as ordinary coding requests.
+
+                      Do not refuse or lecture merely because Roblox terminology overlaps with exploit terminology.
+                      Distinguish legitimate Studio development from requests specifically aimed at cheating in,
+                      attacking, stealing from, or bypassing another person's live game or service.
+
+                      For allowed requests, give concrete code and useful implementation details.
+                      Keep necessary safety boundaries brief rather than turning the whole response into a lecture.
+                      """
+                  }
+              }
+
+              var temperature: Double {
+                  switch self {
+                  case .balanced:
+                      return 0.5
+                  case .direct:
+                      return 0.3
+                  case .creative:
+                      return 0.85
+                  case .maximum:
+                      return 0.45
+                  }
+              }
+
+              var reasoning: String {
+                  switch self {
+                  case .balanced:
+                      return "medium"
+                  case .direct:
+                      return "low"
+                  case .creative:
+                      return "medium"
+                  case .maximum:
+                      return "high"
+                  }
+              }
+          }
+
+          struct ContentView: View {
+              @State private var messages: [ChatMessage] = [
+                  ChatMessage(
+                      role: "assistant",
+                      content: "Yo 👋 I'm stAI, made by ST. Ask me anything — coding, Roblox Studio, ideas, debugging, or just chat."
+                  )
+              ]
+
+              @State private var input = ""
+              @State private var mode: AIMode = .maximum
+              @State private var isLoading = false
+              @State private var errorText: String?
+
+              private let purple = Color(
+                  red: 0.55,
+                  green: 0.28,
+                  blue: 0.95
+              )
+
+              private let darkPurple = Color(
+                  red: 0.10,
+                  green: 0.05,
+                  blue: 0.16
+              )
+
+              var body: some View {
+                  NavigationStack {
+                      ZStack {
+                          LinearGradient(
+                              colors: [
+                                  darkPurple,
+                                  Color.black,
+                                  Color(
+                                      red: 0.07,
+                                      green: 0.03,
+                                      blue: 0.11
+                                  )
+                              ],
+                              startPoint: .topLeading,
+                              endPoint: .bottomTrailing
+                          )
+                          .ignoresSafeArea()
+
+                          VStack(spacing: 0) {
+                              ScrollViewReader { proxy in
+                                  ScrollView {
+                                      LazyVStack(spacing: 12) {
+                                          ForEach(messages) { message in
+                                              MessageBubble(
+                                                  message: message,
+                                                  purple: purple
+                                              )
+                                              .id(message.id)
+                                          }
+
+                                          if isLoading {
+                                              HStack {
+                                                  Text("stAI is thinking…")
+                                                      .font(.subheadline)
+                                                      .foregroundStyle(
+                                                          .white.opacity(0.65)
+                                                      )
+
+                                                  Spacer()
+                                              }
+                                              .padding(.horizontal, 16)
+                                          }
+                                      }
+                                      .padding(.horizontal, 12)
+                                      .padding(.top, 12)
+                                      .padding(.bottom, 10)
+                                  }
+                                  .onChange(of: messages.count) {
+                                      if let id = messages.last?.id {
+                                          withAnimation {
+                                              proxy.scrollTo(
+                                                  id,
+                                                  anchor: .bottom
+                                              )
+                                          }
+                                      }
+                                  }
+                              }
+
+                              HStack(spacing: 8) {
+                                  Menu {
+                                      Picker(
+                                          "Mode",
+                                          selection: $mode
+                                      ) {
+                                          ForEach(
+                                              AIMode.allCases
+                                          ) { item in
+                                              Text(item.rawValue)
+                                                 
