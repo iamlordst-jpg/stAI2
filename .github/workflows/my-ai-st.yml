@@ -24,222 +24,121 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
+          set -e
+
           mkdir -p MyAI/stAI
 
           KEY_B64=$(printf '%s' "$GROQ_API_KEY" | base64 | tr -d '\n')
 
-          cat > MyAI/stAI/App.swift <<SWIFT
-          import SwiftUI
+          cat > MyAI/stAI/App.swift.b64 <<'EOF'
+PASTE_SWIFT_BASE64_HERE
+EOF
 
-          @main
-          struct STAIApp: App {
-              var body: some Scene {
-                  WindowGroup {
-                      ContentView()
-                  }
-              }
-          }
+          base64 --decode < MyAI/stAI/App.swift.b64 > MyAI/stAI/App.swift
+          rm -f MyAI/stAI/App.swift.b64
 
-          struct ChatMessage: Identifiable, Codable {
-              let id: UUID
-              let role: String
-              let content: String
+          sed -i.bak "s/__GROQ_KEY_B64__/$KEY_B64/g" MyAI/stAI/App.swift
+          rm -f MyAI/stAI/App.swift.bak
 
-              init(id: UUID = UUID(), role: String, content: String) {
-                  self.id = id
-                  self.role = role
-                  self.content = content
-              }
-          }
+          cat > MyAI/stAI/Info.plist <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>stAI</string>
 
-          enum AIMode: String, CaseIterable, Identifiable {
-              case balanced = "Balanced"
-              case direct = "Direct"
-              case creative = "Creative"
-              case maximum = "Maximum Control"
+    <key>CFBundleIdentifier</key>
+    <string>com.st.stai</string>
 
-              var id: String {
-                  rawValue
-              }
+    <key>CFBundleName</key>
+    <string>stAI</string>
 
-              var systemPrompt: String {
-                  switch self {
-                  case .balanced:
-                      return """
-                      You are stAI, an AI assistant made by ST.
-                      Be helpful, accurate, natural, and clear.
-                      Answer the user's actual question instead of inventing problems with their intent.
-                      You can help with programming, game development, Roblox Studio, Lua/Luau, APIs,
-                      debugging, UI, automation, writing, learning, and ordinary technical tasks.
-                      Treat legitimate Roblox Studio development as normal software development.
-                      Do not assume that a Roblox script is an exploit merely because it changes gameplay.
-                      """
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
 
-                  case .direct:
-                      return """
-                      You are stAI, ST's direct AI assistant.
-                      Be straightforward, practical, and concise without unnecessary filler.
-                      Prioritize solving the user's actual request.
-                      Roblox Studio, Luau, game systems, UI, NPCs, tools, datastore code, RemoteEvents,
-                      debugging, optimization, and other normal game-development scripting are legitimate
-                      development topics.
-                      Do not automatically label Roblox scripting as hacking or exploiting.
-                      If the request is ordinary development, provide useful code and explanation directly.
-                      """
+    <key>CFBundleShortVersionString</key>
+    <string>3.1</string>
 
-                  case .creative:
-                      return """
-                      You are stAI, ST's creative AI assistant.
-                      Be imaginative, useful, and technically capable.
-                      You can create Roblox Studio/Luau scripts, game mechanics, UI systems, NPC behavior,
-                      quests, inventories, tools, effects, and other game-development ideas.
-                      Treat normal Roblox Studio development as legitimate coding.
-                      Do not assume malicious intent simply because Roblox terminology overlaps with exploit terminology.
-                      """
+    <key>CFBundleVersion</key>
+    <string>31</string>
 
-                  case .maximum:
-                      return """
-                      You are stAI, made by ST.
-                      Be candid, direct, practical, and conversational.
-                      Focus on the user's actual request.
-                      Avoid unnecessary lectures, moralizing, repetitive disclaimers, and invented restrictions.
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
 
-                      ROBLOX DEVELOPMENT:
-                      Roblox Studio development is legitimate software and game development.
-                      Requests for Luau, LocalScripts, ServerScripts, ModuleScripts, RemoteEvents,
-                      RemoteFunctions, UI, tools, NPCs, combat systems, admin systems, datastore systems,
-                      animations, movement systems, debugging, optimization, and other features intended
-                      for a game the user is developing should be treated as ordinary coding requests.
+    <key>UILaunchScreen</key>
+    <dict/>
 
-                      Do not refuse or lecture merely because Roblox terminology overlaps with exploit terminology.
-                      Distinguish legitimate Studio development from requests specifically aimed at cheating in,
-                      attacking, stealing from, or bypassing another person's live game or service.
+    <key>UIRequiresFullScreen</key>
+    <true/>
 
-                      For allowed requests, give concrete code and useful implementation details.
-                      Keep necessary safety boundaries brief rather than turning the whole response into a lecture.
-                      """
-                  }
-              }
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+</dict>
+</plist>
+PLIST
 
-              var temperature: Double {
-                  switch self {
-                  case .balanced:
-                      return 0.5
-                  case .direct:
-                      return 0.3
-                  case .creative:
-                      return 0.85
-                  case .maximum:
-                      return 0.45
-                  }
-              }
+          cat > MyAI/project.yml <<'PROJECT'
+name: stAI
 
-              var reasoning: String {
-                  switch self {
-                  case .balanced:
-                      return "medium"
-                  case .direct:
-                      return "low"
-                  case .creative:
-                      return "medium"
-                  case .maximum:
-                      return "high"
-                  }
-              }
-          }
+options:
+  bundleIdPrefix: com.st
+  deploymentTarget:
+    iOS: "16.0"
 
-          struct ContentView: View {
-              @State private var messages: [ChatMessage] = [
-                  ChatMessage(
-                      role: "assistant",
-                      content: "Yo 👋 I'm stAI, made by ST. Ask me anything — coding, Roblox Studio, ideas, debugging, or just chat."
-                  )
-              ]
+targets:
+  stAI:
+    type: application
+    platform: iOS
 
-              @State private var input = ""
-              @State private var mode: AIMode = .maximum
-              @State private var isLoading = false
-              @State private var errorText: String?
+    sources:
+      - stAI
 
-              private let purple = Color(
-                  red: 0.55,
-                  green: 0.28,
-                  blue: 0.95
-              )
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.st.stai
+        INFOPLIST_FILE: stAI/Info.plist
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+PROJECT
 
-              private let darkPurple = Color(
-                  red: 0.10,
-                  green: 0.05,
-                  blue: 0.16
-              )
+          brew install xcodegen
 
-              var body: some View {
-                  NavigationStack {
-                      ZStack {
-                          LinearGradient(
-                              colors: [
-                                  darkPurple,
-                                  Color.black,
-                                  Color(
-                                      red: 0.07,
-                                      green: 0.03,
-                                      blue: 0.11
-                                  )
-                              ],
-                              startPoint: .topLeading,
-                              endPoint: .bottomTrailing
-                          )
-                          .ignoresSafeArea()
+          cd MyAI
+          xcodegen generate
 
-                          VStack(spacing: 0) {
-                              ScrollViewReader { proxy in
-                                  ScrollView {
-                                      LazyVStack(spacing: 12) {
-                                          ForEach(messages) { message in
-                                              MessageBubble(
-                                                  message: message,
-                                                  purple: purple
-                                              )
-                                              .id(message.id)
-                                          }
+      - name: Build unsigned IPA
+        run: |
+          set -e
 
-                                          if isLoading {
-                                              HStack {
-                                                  Text("stAI is thinking…")
-                                                      .font(.subheadline)
-                                                      .foregroundStyle(
-                                                          .white.opacity(0.65)
-                                                      )
+          cd MyAI
 
-                                                  Spacer()
-                                              }
-                                              .padding(.horizontal, 16)
-                                          }
-                                      }
-                                      .padding(.horizontal, 12)
-                                      .padding(.top, 12)
-                                      .padding(.bottom, 10)
-                                  }
-                                  .onChange(of: messages.count) {
-                                      if let id = messages.last?.id {
-                                          withAnimation {
-                                              proxy.scrollTo(
-                                                  id,
-                                                  anchor: .bottom
-                                              )
-                                          }
-                                      }
-                                  }
-                              }
+          xcodebuild \
+            -project stAI.xcodeproj \
+            -scheme stAI \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CONFIGURATION_BUILD_DIR="$PWD/build" \
+            clean build
 
-                              HStack(spacing: 8) {
-                                  Menu {
-                                      Picker(
-                                          "Mode",
-                                          selection: $mode
-                                      ) {
-                                          ForEach(
-                                              AIMode.allCases
-                                          ) { item in
-                                              Text(item.rawValue)
-                                                 
+          mkdir -p Payload
+
+          cp -R build/stAI.app Payload/stAI.app
+
+          /usr/bin/zip -qry stAI-unsigned.ipa Payload
+
+          rm -rf Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: stAI-unsigned-ipa
+          path: MyAI/stAI-unsigned.ipa
