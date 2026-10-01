@@ -1,2 +1,2 @@
 # stAI2
-A lightweight AI Made by ST with the help of ChatGPT and Groq API keys.
+A AI powered by OpenAI and Codex Made by ST with the help of ChatGPT and Groq API keys.
