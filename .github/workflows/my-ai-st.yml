@@ -486,7 +486,15 @@ jobs:
           }
           SWIFT
 
-          sed -i "s#__GROQ_KEY__#$KEY_B64#g" MyAI/stAI/App.swift
+          python3 - <<'PY'
+from pathlib import Path
+import os
+
+path = Path("MyAI/stAI/App.swift")
+text = path.read_text()
+text = text.replace("__GROQ_KEY__", os.environ["GROQ_API_KEY_B64"])
+path.write_text(text)
+PY
 
           cat > MyAI/stAI/Info.plist <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
