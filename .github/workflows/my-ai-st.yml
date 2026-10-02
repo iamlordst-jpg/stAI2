@@ -5,693 +5,291 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15-intel
+    runs-on: macos-15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check Groq key
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          if [ -z "$GROQ_API_KEY" ]; then
-            echo "GROQ_API_KEY secret is missing."
-            exit 1
-          fi
+      - name: Install XcodeGen
+        run: brew install xcodegen
 
-      - name: Create iOS project
+      - name: Create stAI project
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
+          set -e
+
+          rm -rf MyAI
           mkdir -p MyAI/stAI
 
           KEY_B64=$(printf '%s' "$GROQ_API_KEY" | base64 | tr -d '\n')
 
-          cat > MyAI/stAI/App.swift <<SWIFT
+          cat > MyAI/stAI/App.swift <<'SWIFT'
           import SwiftUI
 
-          @main
-          struct STAIApp: App {
-              var body: some Scene {
-                  WindowGroup {
-                      ContentView()
-                  }
-              }
-          }
-
-          struct ChatMessage: Identifiable, Codable {
-              let id: UUID
+          struct ChatMessage: Identifiable {
+              let id = UUID()
               let role: String
-              let content: String
-
-              init(
-                  id: UUID = UUID(),
-                  role: String,
-                  content: String
-              ) {
-                  self.id = id
-                  self.role = role
-                  self.content = content
-              }
+              let text: String
           }
 
           enum AIMode: String, CaseIterable, Identifiable {
-              case balanced = "Balanced"
-              case direct = "Direct"
-              case creative = "Creative"
-              case maximum = "Maximum Control"
+              case balanced
+              case direct
+              case creative
+              case maximum
 
-              var id: String {
-                  rawValue
+              var id: String { rawValue }
+
+              var title: String {
+                  switch self {
+                  case .balanced: return "Balanced"
+                  case .direct: return "Direct"
+                  case .creative: return "Creative"
+                  case .maximum: return "Maximum Control"
+                  }
+              }
+
+              var subtitle: String {
+                  switch self {
+                  case .balanced:
+                      return "Normal helpful assistant"
+                  case .direct:
+                      return "Short and practical"
+                  case .creative:
+                      return "More imaginative"
+                  case .maximum:
+                      return "Direct and technical"
+                  }
+              }
+
+              var temperature: Double {
+                  switch self {
+                  case .balanced: return 0.7
+                  case .direct: return 0.4
+                  case .creative: return 0.9
+                  case .maximum: return 0.5
+                  }
+              }
+
+              var reasoning: String {
+                  switch self {
+                  case .balanced: return "medium"
+                  case .direct: return "low"
+                  case .creative: return "medium"
+                  case .maximum: return "high"
+                  }
               }
 
               var systemPrompt: String {
                   switch self {
                   case .balanced:
                       return """
-                      You are stAI, an AI assistant made by ST.
-                      Be helpful, accurate, natural, and clear.
-                      Answer the user's actual question instead of inventing problems with their intent.
-                      You can help with programming, game development, Roblox Studio, Lua/Luau, APIs,
-                      debugging, UI, automation, writing, learning, and ordinary technical tasks.
-                      Treat legitimate Roblox Studio development as normal software development.
-                      Do not assume that a Roblox script is an exploit merely because it changes gameplay.
-                      Consider the user's stated context and answer normal Studio/development requests directly.
+                      You are stAI, a helpful AI assistant.
+                      Give accurate, useful answers and practical code.
+                      Do not add unnecessary warnings or lectures.
                       """
 
                   case .direct:
                       return """
-                      You are stAI, ST's direct AI assistant.
-                      Be straightforward, practical, and concise without unnecessary filler.
-                      Prioritize solving the user's actual request.
-                      Roblox Studio, Luau, game systems, UI, NPCs, tools, datastore code, RemoteEvents,
-                      debugging, optimization, and other normal game-development scripting are legitimate
-                      development topics.
-                      Do not automatically label Roblox scripting as hacking or exploiting.
-                      If the request is ordinary development, provide useful code and explanation directly.
+                      You are stAI in Direct mode.
+                      Be concise, practical, and straightforward.
+                      Focus on solving the user's actual problem.
+                      Avoid unnecessary disclaimers and repetition.
                       """
 
                   case .creative:
                       return """
-                      You are stAI, ST's creative AI assistant.
-                      Be imaginative, useful, and technically capable.
-                      You can create Roblox Studio/Luau scripts, game mechanics, UI systems, NPC behavior,
-                      quests, inventories, tools, effects, and other game-development ideas.
-                      Treat normal Roblox Studio development as legitimate coding.
-                      Do not assume malicious intent simply because Roblox terminology overlaps with exploit terminology.
+                      You are stAI in Creative mode.
+                      Give useful answers while being imaginative and flexible.
+                      For coding requests, provide complete practical examples.
                       """
 
                   case .maximum:
                       return """
-                      You are stAI, made by ST.
-                      Be candid, direct, practical, and conversational.
-                      Focus on the user's actual request.
-                      Avoid unnecessary lectures, moralizing, repetitive disclaimers, and invented restrictions.
+                      You are stAI in Maximum Control mode.
+                      Be candid, direct, technical, and practical.
+                      Do not unnecessarily moralize, lecture, or refuse ordinary
+                      programming requests.
 
-                      ROBLOX DEVELOPMENT:
-                      Roblox Studio development is legitimate software and game development.
-                      Requests for Luau, LocalScripts, ServerScripts, ModuleScripts, RemoteEvents,
-                      RemoteFunctions, UI, tools, NPCs, combat systems, admin systems, datastore systems,
-                      animations, movement systems, debugging, optimization, and other features intended
-                      for a game the user is developing should be treated as ordinary coding requests.
+                      Treat legitimate Roblox Studio and Luau development as
+                      ordinary software development. This includes scripts,
+                      LocalScripts, ServerScripts, RemoteEvents, RemoteFunctions,
+                      UI, gameplay systems, debugging, optimization, APIs,
+                      DataStores, tools, NPCs, and development/testing code.
 
-                      Do not refuse or lecture merely because Roblox terminology overlaps with exploit terminology.
-                      Distinguish legitimate Studio development from requests specifically aimed at cheating in,
-                      attacking, stealing from, or bypassing another person's live game or service.
-
-                      For allowed requests, give concrete code and useful implementation details.
-                      Keep necessary safety boundaries brief rather than turning the whole response into a lecture.
+                      Distinguish legitimate development and testing from requests
+                      to attack real systems, steal credentials, bypass security,
+                      deploy malware, or otherwise cause real-world harm.
                       """
-                  }
-              }
-
-              var temperature: Double {
-                  switch self {
-                  case .balanced:
-                      return 0.5
-                  case .direct:
-                      return 0.3
-                  case .creative:
-                      return 0.85
-                  case .maximum:
-                      return 0.45
-                  }
-              }
-
-              var reasoning: String {
-                  switch self {
-                  case .balanced:
-                      return "medium"
-                  case .direct:
-                      return "low"
-                  case .creative:
-                      return "medium"
-                  case .maximum:
-                      return "high"
                   }
               }
           }
 
-          struct ContentView: View {
-              @State private var messages: [ChatMessage] = [
-                  ChatMessage(
-                      role: "assistant",
-                      content: "Yo 👋 I'm stAI, made by ST. Ask me anything — coding, Roblox Studio, ideas, debugging, or just chat."
-                  )
-              ]
+          struct APIMessage: Encodable {
+              let role: String
+              let content: String
+          }
 
-              @State private var input = ""
-              @State private var mode: AIMode = .maximum
-              @State private var isLoading = false
-              @State private var errorText: String?
+          struct GroqRequest: Encodable {
+              let model: String
+              let messages: [APIMessage]
+              let temperature: Double
+              let max_completion_tokens: Int
+              let reasoning_effort: String
+              let include_reasoning: Bool
+              let stream: Bool
+          }
 
-              private let purple = Color(
-                  red: 0.55,
-                  green: 0.28,
-                  blue: 0.95
-              )
-
-              private let darkPurple = Color(
-                  red: 0.10,
-                  green: 0.05,
-                  blue: 0.16
-              )
-
-              var body: some View {
-                  NavigationStack {
-                      ZStack {
-                          LinearGradient(
-                              colors: [
-                                  darkPurple,
-                                  Color.black,
-                                  Color(
-                                      red: 0.07,
-                                      green: 0.03,
-                                      blue: 0.11
-                                  )
-                              ],
-                              startPoint: .topLeading,
-                              endPoint: .bottomTrailing
-                          )
-                          .ignoresSafeArea()
-
-                          VStack(spacing: 0) {
-                              ScrollViewReader { proxy in
-                                  ScrollView {
-                                      LazyVStack(spacing: 12) {
-                                          ForEach(messages) { message in
-                                              MessageBubble(
-                                                  message: message,
-                                                  purple: purple
-                                              )
-                                              .id(message.id)
-                                          }
-
-                                          if isLoading {
-                                              HStack {
-                                                  Text("stAI is thinking…")
-                                                      .font(.subheadline)
-                                                      .foregroundStyle(
-                                                          .white.opacity(0.65)
-                                                      )
-
-                                                  Spacer()
-                                              }
-                                              .padding(.horizontal, 16)
-                                          }
-                                      }
-                                      .padding(.horizontal, 12)
-                                      .padding(.top, 12)
-                                      .padding(.bottom, 10)
-                                  }
-                                  .onChange(of: messages.count) {
-                                      if let id = messages.last?.id {
-                                          withAnimation {
-                                              proxy.scrollTo(
-                                                  id,
-                                                  anchor: .bottom
-                                              )
-                                          }
-                                      }
-                                  }
-                              }
-
-                              HStack(spacing: 8) {
-                                  Menu {
-                                      Picker(
-                                          "Mode",
-                                          selection: $mode
-                                      ) {
-                                          ForEach(
-                                              AIMode.allCases
-                                          ) { item in
-                                              Text(item.rawValue)
-                                                  .tag(item)
-                                          }
-                                      }
-                                  } label: {
-                                      Image(
-                                          systemName: "slider.horizontal.3"
-                                      )
-                                      .font(
-                                          .system(
-                                              size: 18,
-                                              weight: .semibold
-                                          )
-                                      )
-                                      .foregroundStyle(.white)
-                                      .frame(
-                                          width: 42,
-                                          height: 46
-                                      )
-                                      .background(
-                                          purple.opacity(0.35)
-                                      )
-                                      .clipShape(
-                                          RoundedRectangle(
-                                              cornerRadius: 14
-                                          )
-                                      )
-                                  }
-
-                                  TextField(
-                                      "Message stAI…",
-                                      text: $input,
-                                      axis: .vertical
-                                  )
-                                  .lineLimit(1...5)
-                                  .foregroundStyle(.white)
-                                  .padding(.horizontal, 14)
-                                  .padding(.vertical, 11)
-                                  .background(
-                                      .white.opacity(0.10)
-                                  )
-                                  .clipShape(
-                                      RoundedRectangle(
-                                          cornerRadius: 16
-                                      )
-                                  )
-
-                                  Button(
-                                      action: sendMessage
-                                  ) {
-                                      Image(
-                                          systemName: "arrow.up"
-                                      )
-                                      .font(
-                                          .system(
-                                              size: 18,
-                                              weight: .bold
-                                          )
-                                      )
-                                      .foregroundStyle(.white)
-                                      .frame(
-                                          width: 44,
-                                          height: 44
-                                      )
-                                      .background(
-                                          input
-                                              .trimmingCharacters(
-                                                  in: .whitespacesAndNewlines
-                                              )
-                                              .isEmpty
-                                          || isLoading
-                                          ? purple.opacity(0.35)
-                                          : purple
-                                      )
-                                      .clipShape(Circle())
-                                  }
-                                  .disabled(
-                                      input
-                                          .trimmingCharacters(
-                                              in: .whitespacesAndNewlines
-                                          )
-                                          .isEmpty
-                                      || isLoading
-                                  )
-                              }
-                              .padding(10)
-                              .background(
-                                  .black.opacity(0.35)
-                              )
-                          }
-                      }
-                      .navigationTitle("stAI 🤖")
-                      .navigationBarTitleDisplayMode(.inline)
-                      .toolbar {
-                          ToolbarItem(
-                              placement: .topBarLeading
-                          ) {
-                              VStack(
-                                  alignment: .leading,
-                                  spacing: 0
-                              ) {
-                                  Text("ST")
-                                      .font(
-                                          .headline.bold()
-                                      )
-
-                                  Text("made it")
-                                      .font(.caption2)
-                                      .foregroundStyle(
-                                          purple
-                                      )
-                              }
-                          }
-
-                          ToolbarItem(
-                              placement: .topBarTrailing
-                          ) {
-                              Menu {
-                                  Button(
-                                      "New Chat",
-                                      systemImage: "plus"
-                                  ) {
-                                      messages = [
-                                          ChatMessage(
-                                              role: "assistant",
-                                              content: "New chat started. I'm ready."
-                                          )
-                                      ]
-                                  }
-
-                                  Picker(
-                                      "Mode",
-                                      selection: $mode
-                                  ) {
-                                      ForEach(
-                                          AIMode.allCases
-                                      ) { item in
-                                          Text(item.rawValue)
-                                              .tag(item)
-                                      }
-                                  }
-                              } label: {
-                                  Image(
-                                      systemName: "ellipsis.circle"
-                                  )
-                                  .foregroundStyle(
-                                      purple
-                                  )
-                              }
-                          }
-                      }
-                      .alert(
-                          "AI Error",
-                          isPresented: Binding(
-                              get: {
-                                  errorText != nil
-                              },
-                              set: {
-                                  if !$0 {
-                                      errorText = nil
-                                  }
-                              }
-                          )
-                      ) {
-                          Button("OK") {
-                              errorText = nil
-                          }
-                      } message: {
-                          Text(
-                              errorText
-                              ?? "Unknown error"
-                          )
-                      }
+          struct GroqResponse: Decodable {
+              struct Choice: Decodable {
+                  struct ResponseMessage: Decodable {
+                      let content: String?
                   }
-                  .preferredColorScheme(.dark)
+
+                  let message: ResponseMessage
               }
 
-              func sendMessage() {
-                  let text = input
-                      .trimmingCharacters(
-                          in: .whitespacesAndNewlines
-                      )
+              let choices: [Choice]
+          }
 
-                  guard !text.isEmpty, !isLoading else {
+          @MainActor
+          final class ChatViewModel: ObservableObject {
+              @Published var messages: [ChatMessage] = []
+              @Published var input = ""
+              @Published var isLoading = false
+              @Published var mode: AIMode = .balanced
+
+              private let endpoint = URL(string: "https://api.groq.com/openai/v1/chat/completions")!
+
+              private let apiKeyBase64 = "__GROQ_KEY_B64__"
+
+              func send() async {
+                  let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                  guard !trimmed.isEmpty, !isLoading else {
                       return
                   }
 
                   input = ""
-
-                  messages.append(
-                      ChatMessage(
-                          role: "user",
-                          content: text
-                      )
-                  )
-
+                  messages.append(ChatMessage(role: "user", text: trimmed))
                   isLoading = true
 
-                  Task {
-                      do {
-                          let reply = try await GroqAPI.send(
-                              messages: messages,
-                              mode: mode
-                          )
-
-                          await MainActor.run {
-                              messages.append(
-                                  ChatMessage(
-                                      role: "assistant",
-                                      content: reply
-                                  )
-                              )
-
-                              isLoading = false
-                          }
-                      } catch {
-                          await MainActor.run {
-                              errorText =
-                                  error.localizedDescription
-                              isLoading = false
-                          }
-                      }
+                  defer {
+                      isLoading = false
                   }
-              }
-          }
 
-          struct MessageBubble: View {
-              let message: ChatMessage
-              let purple: Color
+                  do {
+                      let reply = try await requestAI()
 
-              var body: some View {
-                  HStack {
-                      if message.role == "user" {
-                          Spacer(minLength: 40)
-                      }
-
-                      VStack(
-                          alignment: .leading,
-                          spacing: 5
-                      ) {
-                          Text(
-                              message.role == "user"
-                              ? "You"
-                              : "stAI"
-                          )
-                          .font(.caption.bold())
-                          .foregroundStyle(
-                              message.role == "user"
-                              ? .white.opacity(0.75)
-                              : purple
-                          )
-
-                          Text(message.content)
-                              .font(.body)
-                              .foregroundStyle(.white)
-                              .textSelection(.enabled)
-                      }
-                      .padding(13)
-                      .background(
-                          message.role == "user"
-                          ? purple.opacity(0.75)
-                          : Color.white.opacity(0.09)
+                      messages.append(
+                          ChatMessage(role: "assistant", text: reply)
                       )
-                      .clipShape(
-                          RoundedRectangle(
-                              cornerRadius: 17
+                  } catch {
+                      messages.append(
+                          ChatMessage(
+                              role: "assistant",
+                              text: "Error: \(error.localizedDescription)"
                           )
                       )
-
-                      if message.role != "user" {
-                          Spacer(minLength: 40)
-                      }
                   }
               }
-          }
 
-          enum GroqAPI {
-              static let apiKeyBase64 =
-                  "__GROQ_KEY_B64__"
-
-              static let endpoint = URL(
-                  string:
-                      "https://api.groq.com/openai/v1/chat/completions"
-              )!
-
-              static func send(
-                  messages: [ChatMessage],
-                  mode: AIMode
-              ) async throws -> String {
-
-                  guard
-                      let keyData =
-                          Data(
-                              base64Encoded:
-                                  apiKeyBase64
-                          ),
-                      let apiKey =
-                          String(
-                              data: keyData,
-                              encoding: .utf8
-                          )
-                  else {
+              private func requestAI() async throws -> String {
+                  guard let keyData = Data(base64Encoded: apiKeyBase64),
+                        let apiKey = String(data: keyData, encoding: .utf8),
+                        !apiKey.isEmpty else {
                       throw NSError(
                           domain: "stAI",
                           code: 1,
                           userInfo: [
-                              NSLocalizedDescriptionKey:
-                                  "Groq API key is missing."
+                              NSLocalizedDescriptionKey: "Groq API key is missing."
                           ]
                       )
                   }
 
-                  var request =
-                      URLRequest(
-                          url: endpoint
+                  var apiMessages: [APIMessage] = [
+                      APIMessage(
+                          role: "system",
+                          content: mode.systemPrompt
                       )
+                  ]
 
+                  let recentMessages = Array(messages.suffix(24))
+
+                  for message in recentMessages {
+                      apiMessages.append(
+                          APIMessage(
+                              role: message.role,
+                              content: message.text
+                          )
+                      )
+                  }
+
+                  let requestBody = GroqRequest(
+                      model: "openai/gpt-oss-20b",
+                      messages: apiMessages,
+                      temperature: mode.temperature,
+                      max_completion_tokens: 16384,
+                      reasoning_effort: mode.reasoning,
+                      include_reasoning: false,
+                      stream: false
+                  )
+
+                  var request = URLRequest(url: endpoint)
                   request.httpMethod = "POST"
-
                   request.setValue(
                       "Bearer \(apiKey)",
-                      forHTTPHeaderField:
-                          "Authorization"
+                      forHTTPHeaderField: "Authorization"
                   )
-
                   request.setValue(
                       "application/json",
-                      forHTTPHeaderField:
-                          "Content-Type"
+                      forHTTPHeaderField: "Content-Type"
+                  )
+                  request.httpBody = try JSONEncoder().encode(requestBody)
+
+                  let (data, response) = try await URLSession.shared.data(
+                      for: request
                   )
 
-                  let recent =
-                      Array(
-                          messages.suffix(24)
-                      )
-
-                  var apiMessages:
-                      [[String: String]] = [
-                          [
-                              "role": "system",
-                              "content":
-                                  mode.systemPrompt
-                          ]
-                      ]
-
-                  for item in recent {
-                      apiMessages.append(
-                          [
-                              "role":
-                                  item.role
-                                  == "assistant"
-                                  ? "assistant"
-                                  : "user",
-                              "content":
-                                  item.content
-                          ]
-                      )
-                  }
-
-                  let body:
-                      [String: Any] = [
-                          "model":
-                              "openai/gpt-oss-20b",
-                          "messages":
-                              apiMessages,
-                          "temperature":
-                              mode.temperature,
-                          "max_completion_tokens":
-                              16384,
-                          "reasoning_effort":
-                              mode.reasoning,
-                          "include_reasoning":
-                              false,
-                          "stream":
-                              false
-                      ]
-
-                  request.httpBody =
-                      try JSONSerialization.data(
-                          withJSONObject: body
-                      )
-
-                  let (
-                      data,
-                      response
-                  ) =
-                      try await URLSession.shared.data(
-                          for: request
-                      )
-
-                  if let http =
-                      response
-                      as? HTTPURLResponse,
-                     !(200...299).contains(
-                         http.statusCode
-                     ) {
-
-                      let raw =
-                          String(
-                              data: data,
-                              encoding: .utf8
-                          )
-                          ?? "Unknown Groq error"
-
+                  guard let httpResponse = response as? HTTPURLResponse else {
                       throw NSError(
-                          domain: "Groq",
-                          code:
-                              http.statusCode,
-                          userInfo: [
-                              NSLocalizedDescriptionKey:
-                                  raw
-                          ]
-                      )
-                  }
-
-                  let json =
-                      try JSONSerialization.jsonObject(
-                          with: data
-                      )
-                      as? [String: Any]
-
-                  let choices =
-                      json?["choices"]
-                      as? [[String: Any]]
-
-                  let first =
-                      choices?.first
-
-                  let message =
-                      first?["message"]
-                      as? [String: Any]
-
-                  let content =
-                      message?["content"]
-                      as? String
-
-                  guard
-                      let content,
-                      !content.isEmpty
-                  else {
-                      throw NSError(
-                          domain: "Groq",
+                          domain: "stAI",
                           code: 2,
                           userInfo: [
-                              NSLocalizedDescriptionKey:
-                                  "Groq returned no text."
+                              NSLocalizedDescriptionKey: "Invalid server response."
+                          ]
+                      )
+                  }
+
+                  guard (200...299).contains(httpResponse.statusCode) else {
+                      let serverText = String(
+                          data: data,
+                          encoding: .utf8
+                      ) ?? "Unknown API error"
+
+                      throw NSError(
+                          domain: "Groq",
+                          code: httpResponse.statusCode,
+                          userInfo: [
+                              NSLocalizedDescriptionKey: serverText
+                          ]
+                      )
+                  }
+
+                  let decoded = try JSONDecoder().decode(
+                      GroqResponse.self,
+                      from: data
+                  )
+
+                  guard let content = decoded.choices.first?.message.content,
+                        !content.isEmpty else {
+                      throw NSError(
+                          domain: "Groq",
+                          code: 3,
+                          userInfo: [
+                              NSLocalizedDescriptionKey: "The AI returned an empty response."
                           ]
                       )
                   }
@@ -699,15 +297,246 @@ jobs:
                   return content
               }
           }
+
+          struct ContentView: View {
+              @StateObject private var vm = ChatViewModel()
+              @FocusState private var inputFocused: Bool
+
+              var body: some View {
+                  ZStack {
+                      LinearGradient(
+                          colors: [
+                              Color(red: 0.04, green: 0.02, blue: 0.09),
+                              Color(red: 0.13, green: 0.04, blue: 0.23),
+                              Color(red: 0.04, green: 0.02, blue: 0.09)
+                          ],
+                          startPoint: .topLeading,
+                          endPoint: .bottomTrailing
+                      )
+                      .ignoresSafeArea()
+
+                      VStack(spacing: 0) {
+                          header
+
+                          Divider()
+                              .overlay(Color.white.opacity(0.08))
+
+                          chatArea
+
+                          inputArea
+                      }
+                  }
+                  .preferredColorScheme(.dark)
+              }
+
+              private var header: some View {
+                  HStack {
+                      VStack(alignment: .leading, spacing: 2) {
+                          Text("stAI")
+                              .font(.system(size: 26, weight: .bold))
+
+                          Text("Made by ST")
+                              .font(.caption)
+                              .foregroundStyle(.white.opacity(0.5))
+                      }
+
+                      Spacer()
+
+                      Menu {
+                          ForEach(AIMode.allCases) { option in
+                              Button {
+                                  vm.mode = option
+                              } label: {
+                                  HStack {
+                                      Text(option.title)
+
+                                      if vm.mode == option {
+                                          Image(systemName: "checkmark")
+                                      }
+                                  }
+                              }
+                          }
+                      } label: {
+                          HStack(spacing: 7) {
+                              Image(systemName: "slider.horizontal.3")
+                              Text(vm.mode.title)
+                          }
+                          .font(.subheadline.weight(.semibold))
+                          .padding(.horizontal, 12)
+                          .padding(.vertical, 9)
+                          .background(
+                              Color.purple.opacity(0.25)
+                          )
+                          .clipShape(Capsule())
+                      }
+                  }
+                  .padding(.horizontal, 18)
+                  .padding(.vertical, 14)
+              }
+
+              private var chatArea: some View {
+                  ScrollViewReader { proxy in
+                      ScrollView {
+                          LazyVStack(spacing: 14) {
+                              if vm.messages.isEmpty {
+                                  welcomeView
+                              }
+
+                              ForEach(vm.messages) { message in
+                                  messageBubble(message)
+                                      .id(message.id)
+                              }
+
+                              if vm.isLoading {
+                                  HStack {
+                                      ProgressView()
+                                          .tint(.white)
+
+                                      Text("Thinking...")
+                                          .foregroundStyle(.white.opacity(0.6))
+
+                                      Spacer()
+                                  }
+                                  .padding(.horizontal, 18)
+                              }
+                          }
+                          .padding(.horizontal, 14)
+                          .padding(.vertical, 18)
+                      }
+                      .onChange(of: vm.messages.count) { _ in
+                          if let last = vm.messages.last {
+                              withAnimation {
+                                  proxy.scrollTo(last.id, anchor: .bottom)
+                              }
+                          }
+                      }
+                  }
+              }
+
+              private var welcomeView: some View {
+                  VStack(spacing: 12) {
+                      Spacer(minLength: 80)
+
+                      Image(systemName: "sparkles")
+                          .font(.system(size: 46))
+                          .foregroundStyle(.purple)
+
+                      Text("Welcome to stAI")
+                          .font(.title2.weight(.bold))
+
+                      Text(vm.mode.subtitle)
+                          .foregroundStyle(.white.opacity(0.55))
+                  }
+                  .frame(maxWidth: .infinity)
+              }
+
+              private func messageBubble(_ message: ChatMessage) -> some View {
+                  HStack {
+                      if message.role == "assistant" {
+                          bubble(
+                              text: message.text,
+                              alignment: .leading,
+                              background: Color.white.opacity(0.08)
+                          )
+
+                          Spacer(minLength: 40)
+                      } else {
+                          Spacer(minLength: 40)
+
+                          bubble(
+                              text: message.text,
+                              alignment: .leading,
+                              background: Color.purple.opacity(0.35)
+                          )
+                      }
+                  }
+              }
+
+              private func bubble(
+                  text: String,
+                  alignment: HorizontalAlignment,
+                  background: Color
+              ) -> some View {
+                  Text(text)
+                      .frame(
+                          maxWidth: .infinity,
+                          alignment: Alignment(horizontal: alignment, vertical: .center)
+                      )
+                      .foregroundStyle(.white)
+                      .textSelection(.enabled)
+                      .padding(14)
+                      .background(background)
+                      .clipShape(RoundedRectangle(cornerRadius: 16))
+              }
+
+              private var inputArea: some View {
+                  HStack(alignment: .bottom, spacing: 10) {
+                      TextField(
+                          "Message stAI...",
+                          text: $vm.input,
+                          axis: .vertical
+                      )
+                      .focused($inputFocused)
+                      .lineLimit(1...5)
+                      .padding(.horizontal, 14)
+                      .padding(.vertical, 11)
+                      .background(Color.white.opacity(0.08))
+                      .clipShape(RoundedRectangle(cornerRadius: 16))
+                      .onSubmit {
+                          Task {
+                              await vm.send()
+                          }
+                      }
+
+                      Button {
+                          inputFocused = false
+
+                          Task {
+                              await vm.send()
+                          }
+                      } label: {
+                          Image(systemName: "arrow.up")
+                              .font(.system(size: 17, weight: .bold))
+                              .foregroundStyle(.white)
+                              .frame(width: 44, height: 44)
+                              .background(Color.purple)
+                              .clipShape(Circle())
+                      }
+                      .disabled(
+                          vm.isLoading ||
+                          vm.input.trimmingCharacters(
+                              in: .whitespacesAndNewlines
+                          ).isEmpty
+                      )
+                      .opacity(
+                          vm.isLoading ||
+                          vm.input.trimmingCharacters(
+                              in: .whitespacesAndNewlines
+                          ).isEmpty ? 0.45 : 1
+                      )
+                  }
+                  .padding(.horizontal, 14)
+                  .padding(.vertical, 12)
+                  .background(
+                      Color.black.opacity(0.2)
+                  )
+              }
+          }
+
+          @main
+          struct stAIApp: App {
+              var body: some Scene {
+                  WindowGroup {
+                      ContentView()
+                  }
+              }
+          }
           SWIFT
 
-          sed -i.bak \
-            "s|__GROQ_KEY_B64__|$KEY_B64|g" \
-            MyAI/stAI/App.swift
-
+          sed -i.bak "s|__GROQ_KEY_B64__|$KEY_B64|g" MyAI/stAI/App.swift
           rm -f MyAI/stAI/App.swift.bak
 
-          cat > MyAI/stAI/Info.plist <<PLIST
+          cat > MyAI/stAI/Info.plist <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -715,39 +544,36 @@ jobs:
               <key>CFBundleDisplayName</key>
               <string>stAI</string>
 
-              <key>CFBundleIdentifier</key>
-              <string>com.st.stai</string>
-
               <key>CFBundleName</key>
               <string>stAI</string>
 
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.st.stai</string>
 
               <key>CFBundleShortVersionString</key>
-              <string>3.1</string>
+              <string>1.0</string>
 
               <key>CFBundleVersion</key>
-              <string>31</string>
+              <string>1</string>
 
               <key>LSRequiresIPhoneOS</key>
               <true/>
 
               <key>UILaunchScreen</key>
-              <dict/>
+              <dict>
+                  <key>UIColorName</key>
+                  <string>LaunchBackground</string>
+              </dict>
 
-              <key>UIRequiresFullScreen</key>
-              <true/>
-
-              <key>UISupportedInterfaceOrientations</key>
+              <key>UIRequiredDeviceCapabilities</key>
               <array>
-                  <string>UIInterfaceOrientationPortrait</string>
+                  <string>arm64</string>
               </array>
           </dict>
           </plist>
           PLIST
 
-          cat > MyAI/project.yml <<YAML
+          cat > MyAI/project.yml <<'YAML'
           name: stAI
 
           options:
@@ -767,21 +593,21 @@ jobs:
                 base:
                   PRODUCT_BUNDLE_IDENTIFIER: com.st.stai
                   INFOPLIST_FILE: stAI/Info.plist
-                  SWIFT_VERSION: 5.0
-                  IPHONEOS_DEPLOYMENT_TARGET: 16.0
+                  SWIFT_VERSION: "5.0"
+                  IPHONEOS_DEPLOYMENT_TARGET: "16.0"
                   TARGETED_DEVICE_FAMILY: "1,2"
                   CODE_SIGNING_ALLOWED: NO
                   CODE_SIGNING_REQUIRED: NO
+                  DEVELOPMENT_TEAM: ""
           YAML
 
-          brew install xcodegen
-
           cd MyAI
-
           xcodegen generate
 
       - name: Build unsigned IPA
         run: |
+          set -e
+
           cd MyAI
 
           xcodebuild \
@@ -795,16 +621,20 @@ jobs:
             CONFIGURATION_BUILD_DIR="$PWD/build" \
             clean build
 
-          mkdir -p Payload
+          test -d build/stAI.app
 
+          mkdir -p Payload
           cp -R build/stAI.app Payload/stAI.app
 
           /usr/bin/zip -qry stAI-unsigned.ipa Payload
 
           rm -rf Payload
 
+          test -f stAI-unsigned.ipa
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: stAI-unsigned-ipa
           path: MyAI/stAI-unsigned.ipa
+          if-no-files-found: error
